@@ -8,6 +8,7 @@
  * Our tcp server object.
  */
 uv_tcp_t server;
+uv_tcp_t *client;
 
 /**
  * Shared reference to our event loop.
@@ -25,6 +26,9 @@ int main() {
 		const int port = 3000;
 		const char *host = "127.0.0.1";
 		printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
+
+		/* dynamically allocate a new client stream object on conn */
+		client = malloc(sizeof(uv_tcp_t));
 
     loop = uv_default_loop();
     
@@ -45,16 +49,16 @@ int main() {
     }
 
     /* execute all tasks in queue */
-    return uv_run(loop, UV_RUN_DEFAULT);
+    uv_run(loop, UV_RUN_DEFAULT);
+	if (client != NULL)
+		free(client);
+	return 0;
 }
 
 /**
  * Callback which is executed on each new connection.
  */
 void connection_cb(uv_stream_t * server, int status) {
-    /* dynamically allocate a new client stream object on conn */
-    uv_tcp_t * client = malloc(sizeof(uv_tcp_t));
-    
     /* if status not zero there was an error */
     if (status == -1) {
         fprintf(stderr, "Error on listening: %s.\n", 
