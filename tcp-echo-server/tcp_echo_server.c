@@ -105,9 +105,11 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 		printf("READ buffer: ");
     for (size_t i=0; i<nread; ++i) { 
     	unsigned char c = buf.base[i];
-    	if ( (c>=32) && (c<=127) ) printf("%c,",c);
-    	else printf("[%u]", (unsigned int)c);
+    	if (i) printf(",");
+    	if ( (c>=32) && (c<=127) ) printf("%c",c);
+    	else printf("(%u)", (unsigned int)c);
     }
+    printf(" nread=%llu ", (unsigned long long)nread);
     printf(" len=%llu\n", (unsigned long long)buf.len);
 
     /* write sync the incoming buffer to the socket */
