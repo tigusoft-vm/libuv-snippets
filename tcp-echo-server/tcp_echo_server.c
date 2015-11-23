@@ -1,6 +1,7 @@
 #include <uv.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 /**
@@ -107,10 +108,11 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 
     /* write sync the incoming buffer to the socket */
 
-		// TODO
-    buf.len = nread; // quick hack, this field is read-only according to doc, should copy the buff instead
+    uv_buf_t write_buf = uv_buf_init((char *) malloc(nread), nread);
+	write_buf.len = nread;
+	memcpy(write_buf.base, buf.base, nread);
 
-    int r = uv_write(req, stream, &buf, 1, NULL);
+    int r = uv_write(req, stream, &write_buf, 1, NULL);
 
     if (r) {
         fprintf(stderr, "Error on writing client stream: %s.\n", 
@@ -118,7 +120,10 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
     }
 
     /* free the remaining memory */
+	//uv_stop(loop);
     free(buf.base);
+	free(write_buf.base);
+	free(req);
 }
 
 /**
