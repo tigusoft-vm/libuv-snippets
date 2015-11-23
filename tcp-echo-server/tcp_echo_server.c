@@ -1,6 +1,7 @@
 #include <uv.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 
 /**
  * Our tcp server object.
@@ -20,10 +21,14 @@ void connection_cb(uv_stream_t * server, int status);
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf);
 
 int main() {
+		const int port = 3000;
+		const char *host = "127.0.0.1";
+		printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
+
     loop = uv_default_loop();
     
     /* convert a humanreadable ip address to a c struct */
-    struct sockaddr_in addr = uv_ip4_addr("127.0.0.1", 3000);
+    struct sockaddr_in addr = uv_ip4_addr(host, port);
 
     /* initialize the server */
     uv_tcp_init(loop, &server);
@@ -90,7 +95,21 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
         uv_close((uv_handle_t *) stream, NULL);
     }
 
+    assert(nread<=buf.len); // this should be impossible, uv should never return it
+
+		printf("READ buffer: ");
+    for (size_t i=0; i<nread; ++i) { 
+    	unsigned char c = buf.base[i];
+    	if ( (c>=32) && (c<=127) ) printf("%c,",c);
+    	else printf("[%u]", (unsigned int)c);
+    }
+    printf(" len=%llu\n", (unsigned long long)buf.len);
+
     /* write sync the incoming buffer to the socket */
+
+		// TODO
+    buf.len = nread; // quick hack, this field is read-only according to doc, should copy the buff instead
+
     int r = uv_write(req, stream, &buf, 1, NULL);
 
     if (r) {
