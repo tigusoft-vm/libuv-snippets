@@ -22,6 +22,65 @@ uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size);
 void connection_cb(uv_stream_t * server, int status);
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf);
 
+/////////////////////////////////////////////////////////////////////
+typedef struct uv_buff_circular {
+	uv_buf_t *buffs; // array of buffers
+	size_t nbuffs; // number of elements in buffs
+	int size; // current size
+	// private
+	uv_buf_t *current_element;
+} uv_buff_circular;
+
+/**
+ * @param nbufs Number of buffers
+ * @param buff_size Single buffer size
+ */
+void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t buff_size) {
+	circular_buff->buffs = (uv_buf_t *)malloc(sizeof(uv_buf_t) * nbufs);
+	for (int i = 0; i < nbufs; ++i) {
+		circular_buff->buffs[i] = uv_buf_init((char *) malloc(buff_size), buff_size);
+	}
+	circular_buff->nbuffs = nbufs;
+	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
+	circular_buff->size = 0;
+}
+
+/**
+ * Copy data from buff
+ */
+int buff_circular_add(uv_buff_circular *circular_buff, const uv_buf_t * const buff) {
+	if (buff->len > circular_buff->buffs->len) {
+		return 1;
+	}
+	if (circular_buff == NULL) {
+		return 2;
+	}
+	if (buff == NULL) {
+		return 3;
+	}
+
+	// check if current_element == last element
+	if (circular_buff->current_element == &circular_buff->buffs[circular_buff->nbuffs -1]) {
+		circular_buff->current_element = circular_buff->buffs;
+	}
+	else {
+		circular_buff->current_element++;
+	}
+	if (circular_buff->size != 0) {
+		free(circular_buff->current_element->base); // free old elemenrt
+	}
+	// copy element
+	circular_buff->current_element->len = buff->len;
+	memcpy(circular_buff->current_element->base, buff->base, buff->len);
+	if (circular_buff->size < circular_buff->nbuffs) {
+		circular_buff->size++;
+	}
+	return 0;
+}
+
+
+/////////////////////////////////////////////////////////////////////
+
 int main() {
 		const int port = 3000;
 		const char *host = "127.0.0.1";
