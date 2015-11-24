@@ -123,23 +123,32 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 		return 3;
 	}
 
-	size_t pop_element_index = circular_buff->size;
+	size_t pop_element_index = circular_buff->nbuffs;
 	size_t last_element_index = circular_buff->current_element - circular_buff->buffs;
-	// [0][1][2][3][4][5][6][7]
-	//     ^        ^
-	if (last_element_index <= circular_buff->size) {
+
+	uv_buf_t *pop_ptr = circular_buff->current_element;
+	for (int i = 0; i < circular_buff->size - 1; ++i) {
+		if (pop_ptr == &circular_buff->buffs[0]) {
+			pop_ptr += circular_buff->nbuffs - 1; // last element in array
+		}
+		else {
+			pop_ptr--;
+		}
+	}
+
+/*	if (last_element_index <= circular_buff->size) {
 		pop_element_index = last_element_index - circular_buff->size + 1;
 	}
 	else {
 		pop_element_index = circular_buff->nbuffs - (circular_buff->size - last_element_index - 1);
-	}
+	}*/
 
-	assert(pop_element_index < circular_buff->size);
+	assert(pop_element_index <= circular_buff->nbuffs);
 
 	// copy buffer
-	memcpy(buff->base, circular_buff->buffs[last_element_index].base, circular_buff->buffs[last_element_index].len);
-	buff->len = circular_buff->buffs[last_element_index].len;
-	circular_buff->buffs[last_element_index].len = 0;
+	memcpy(buff->base, pop_ptr->base, pop_ptr->len);
+	buff->len = pop_ptr->len;
+	pop_ptr->len = 0;
 	circular_buff->size--;
 
 	return 0;
@@ -160,9 +169,9 @@ static int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)
 	uv_buf_t *element = circular_buff->current_element;
 	assert(element != NULL);
 	for (int i = 0; i < circular_buff->nbuffs; ++i) { // for each element
-		assert(element < &circular_buff->buffs[circular_buff->size]);
+		assert(element < &circular_buff->buffs[circular_buff->nbuffs]);
 		lambda(element);
-		if (element == &circular_buff->buffs[circular_buff->size - 1]) { // if element == last element in array
+		if (element == &circular_buff->buffs[circular_buff->nbuffs - 1]) { // if element == last element in array
 			element = &circular_buff->buffs[0];
 		}
 		else {
@@ -197,15 +206,15 @@ void test_buff_circular() {
 	const size_t number_of_buffs = 3;
 	buff_circular_init(&circular_buff, number_of_buffs, buff_size);
 
-	uv_buf_t buff;
-	buff.base = malloc(sizeof(char) * buff_size);
-	buff.len = buff_size;
-
 	for (int i = 0; i < number_of_buffs; ++i) {
+		uv_buf_t buff;
+		buff.base = malloc(sizeof(char) * buff_size);
+		buff.len = buff_size;
 		for (int j = 0; j < buff_size; ++j) {
 			buff.base[j] = 'a';
 		}
 		buff_circular_push(&circular_buff, &buff);
+		free(buff.base);
 	}
 
 	for (int i = 0; i < circular_buff.nbuffs; ++i) {
@@ -213,10 +222,14 @@ void test_buff_circular() {
 		buff2.base = malloc(buff_size);
 		buff2.len = 0;
 		buff_circular_pop(&circular_buff, &buff2);
+		printf("pop buffer\n");
+		for (int j = 0; j < buff2.len; ++j) {
+			printf("%c", buff2.base[i]);
+		}
+		printf("\n");
 		free(buff2.base);
 	}
 
-	free(buff.base);
 	buff_circular_deinit(&circular_buff);
 }
 
