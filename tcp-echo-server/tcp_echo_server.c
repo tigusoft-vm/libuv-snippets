@@ -123,13 +123,25 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 		return 3;
 	}
 
-	// move buffer
-	buff->base = circular_buff->current_element->base;
-	buff->len = circular_buff->current_element->len;
-	circular_buff->current_element->base = NULL;
-	circular_buff->current_element->len = 0;
+	size_t pop_element_index = circular_buff->size;
+	size_t last_element_index = circular_buff->current_element - circular_buff->buffs;
+	// [0][1][2][3][4][5][6][7]
+	//     ^        ^
+	if (last_element_index <= circular_buff->size) {
+		pop_element_index = last_element_index - circular_buff->size + 1;
+	}
+	else {
+		pop_element_index = circular_buff->nbuffs - (circular_buff->size - last_element_index - 1);
+	}
 
-	move_internal_pointer(circular_buff);
+	assert(pop_element_index < circular_buff->size);
+
+	// move buffer
+	buff->base = circular_buff->buffs[last_element_index]->base;
+	buff->len = circular_buff->buffs[last_element_index]->len;
+	circular_buff->buffs[last_element_index]->base = NULL;
+	circular_buff->buffs[last_element_index]->len = 0;
+	circular_buff->nbuffs--;
 
 	return 0;
 }
