@@ -224,7 +224,7 @@ void test_buff_circular() {
 		buff_circular_pop(&circular_buff, &buff2);
 		printf("pop buffer %d\n", i);
 		for (int j = 0; j < buff2.len; ++j) {
-			//printf("%c", buff2.base[i]);
+			printf("%c", buff2.base[j]);
 		}
 		printf("\n");
 		free(buff2.base);
