@@ -37,7 +37,6 @@ typedef struct uv_buff_circular {
  * Call free for buff
  */
 static void free_buff(uv_buf_t *buff) {
-	printf("free_buff\n");
 	assert(buff != NULL);
 	free(buff->base);
 	buff->base = NULL;
@@ -107,6 +106,7 @@ int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const b
 }
 
 /**
+ * Copy data to buff
  * @param buff Out pointer. Must be allocated earlier.
  * @return 0 if success
  */
@@ -118,7 +118,6 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 		return 2;
 	}
 
-	buff->base = NULL;
 	buff->len = 0;
 	if (circular_buff->size == 0) { // buffer is empty
 		return 3;
@@ -137,12 +136,11 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 
 	assert(pop_element_index < circular_buff->size);
 
-	// move buffer
-	buff->base = circular_buff->buffs[last_element_index].base;
+	// copy buffer
+	memcpy(buff->base, circular_buff->buffs[last_element_index].base, circular_buff->buffs[last_element_index].len);
 	buff->len = circular_buff->buffs[last_element_index].len;
-	circular_buff->buffs[last_element_index].base = NULL;
 	circular_buff->buffs[last_element_index].len = 0;
-	circular_buff->nbuffs--;
+	circular_buff->size--;
 
 	return 0;
 }
@@ -195,7 +193,30 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 
 void test_buff_circular() {
 	uv_buff_circular circular_buff;
-	buff_circular_init(&circular_buff, 3, 5);
+	const size_t buff_size = 5;
+	const size_t number_of_buffs = 3;
+	buff_circular_init(&circular_buff, number_of_buffs, buff_size);
+
+	uv_buf_t buff;
+	buff.base = malloc(sizeof(char) * buff_size);
+	buff.len = buff_size;
+
+	for (int i = 0; i < number_of_buffs; ++i) {
+		for (int j = 0; j < buff_size; ++j) {
+			buff.base[j] = 'a';
+		}
+		buff_circular_push(&circular_buff, &buff);
+	}
+
+	for (int i = 0; i < circular_buff.nbuffs; ++i) {
+		uv_buf_t buff2;
+		buff2.base = malloc(buff_size);
+		buff2.len = 0;
+		buff_circular_pop(&circular_buff, &buff2);
+		free(buff2.base);
+	}
+
+	free(buff.base);
 	buff_circular_deinit(&circular_buff);
 }
 
