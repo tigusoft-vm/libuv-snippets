@@ -110,6 +110,16 @@ int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf
 }
 
 /**
+ * Call free for buff
+ */
+static void free_buff(uv_buf_t *buff) {
+	assert(buff != NULL);
+	free(buff->base);
+	buff->base = NULL;
+	buff->len = 0;
+}
+
+/**
  * Call free() for evry element.
  * Deallocate internal array.
  */
@@ -117,9 +127,8 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 	if (circular_buff == NULL) {
 		return;
 	}
-	for (int i = 0; i < circular_buff->nbuffs; ++i) {
-		free(circular_buff->buffs[i].base);
-	}
+
+	buff_circular_foreach(circular_buff, free_buff);
 	free(circular_buff->buffs);
 	circular_buff->current_element = NULL;
 	circular_buff->buffs = NULL;
