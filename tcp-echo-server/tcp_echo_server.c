@@ -37,6 +37,7 @@ typedef struct uv_buff_circular {
  * Call free for buff
  */
 static void free_buff(uv_buf_t *buff) {
+	printf("free_buff\n");
 	assert(buff != NULL);
 	free(buff->base);
 	buff->base = NULL;
@@ -150,20 +151,17 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
  * Call lambda for each element in circular_buff.
  * @return 0 if success
  */
-int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf_t *)) {
+static int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf_t *)) {
 	if (circular_buff == NULL) {
 		return 1;
 	}
 	if (lambda == NULL) {
 		return 2;
 	}
-	if (circular_buff->size == 0) { // empty buffer
-		return 3;
-	}
 
 	uv_buf_t *element = circular_buff->current_element;
 	assert(element != NULL);
-	for (int i = 0; i < circular_buff->size; ++i) { // for each element
+	for (int i = 0; i < circular_buff->nbuffs; ++i) { // for each element
 		assert(element < &circular_buff->buffs[circular_buff->size]);
 		lambda(element);
 		if (element == &circular_buff->buffs[circular_buff->size - 1]) { // if element == last element in array
@@ -195,9 +193,15 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 
 /////////////////////////////////////////////////////////////////////
 
+void test_buff_circular() {
+	uv_buff_circular circular_buff;
+	buff_circular_init(&circular_buff, 3, 5);
+	buff_circular_deinit(&circular_buff);
+}
+
 int main() {
 
-
+	test_buff_circular();
 	return 0;
 
 		const int port = 3000;
