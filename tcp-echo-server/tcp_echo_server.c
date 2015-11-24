@@ -47,8 +47,9 @@ void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t bu
 
 /**
  * Copy data from buff
+ * @return 0 if success
  */
-int buff_circular_add(uv_buff_circular *circular_buff, const uv_buf_t * const buff) {
+int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const buff) {
 	if (buff->len > circular_buff->buffs->len) {
 		return 1;
 	}
@@ -67,7 +68,7 @@ int buff_circular_add(uv_buff_circular *circular_buff, const uv_buf_t * const bu
 		circular_buff->current_element++;
 	}
 	if (circular_buff->size != 0) {
-		free(circular_buff->current_element->base); // free old elemenrt
+		free(circular_buff->current_element->base); // free old elemenrt TODO
 	}
 	// copy element
 	circular_buff->current_element->len = buff->len;
@@ -78,6 +79,53 @@ int buff_circular_add(uv_buff_circular *circular_buff, const uv_buf_t * const bu
 	return 0;
 }
 
+/**
+ * Call lambda for each element in circular_buff.
+ * @return 0 if success
+ */
+int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf_t *)) {
+	if (circular_buff == NULL) {
+		return 1;
+	}
+	if (lambda == NULL) {
+		return 2;
+	}
+	if (circular_buff->size == 0) { // empty buffer
+		return 3;
+	}
+
+	uv_buf_t *element = circular_buff->current_element;
+	assert(element != NULL);
+	for (int i = 0; i < circular_buff->size; ++i) { // for each element
+		assert(element < &circular_buff->buffs[circular_buff->size]);
+		lambda(element);
+		if (element == &circular_buff->buffs[circular_buff->size - 1]) { // if element == last element in array
+			element = &circular_buff->buffs[0];
+		}
+		else {
+			element++;
+		}
+	}
+	return 0;
+}
+
+/**
+ * Call free() for evry element.
+ * Deallocate internal array.
+ */
+void buff_circular_deinit(uv_buff_circular *circular_buff) {
+	if (circular_buff == NULL) {
+		return;
+	}
+	for (int i = 0; i < circular_buff->nbuffs; ++i) {
+		free(circular_buff->buffs[i].base);
+	}
+	free(circular_buff->buffs);
+	circular_buff->current_element = NULL;
+	circular_buff->buffs = NULL;
+	circular_buff->nbuffs = 0;
+	circular_buff->size = 0;
+}
 
 /////////////////////////////////////////////////////////////////////
 
