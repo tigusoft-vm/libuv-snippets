@@ -29,6 +29,7 @@ typedef struct uv_buff_circular {
 	int size; // current size
 	// private
 	uv_buf_t *current_element; // last element
+	size_t single_buff_size;
 } uv_buff_circular;
 
 //private functions
@@ -72,6 +73,7 @@ void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t bu
 	circular_buff->nbuffs = nbufs;
 	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
 	circular_buff->size = 0;
+	circular_buff->single_buff_size = buff_size;
 }
 
 /**
@@ -79,7 +81,7 @@ void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t bu
  * @return 0 if success
  */
 int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const buff) {
-	if (buff->len > circular_buff->buffs->len) {
+	if (buff->len > circular_buff->single_buff_size) {
 		return 1;
 	}
 	if (circular_buff == NULL) {
@@ -212,6 +214,31 @@ void test_buff_circular() {
 		buff.len = buff_size;
 		for (int j = 0; j < buff_size; ++j) {
 			buff.base[j] = 'a';
+		}
+		buff_circular_push(&circular_buff, &buff);
+		free(buff.base);
+	}
+
+	for (int i = 0; i < circular_buff.nbuffs; ++i) {
+		uv_buf_t buff2;
+		buff2.base = (char*)malloc(sizeof(char) * buff_size);
+		buff2.len = 0;
+		buff_circular_pop(&circular_buff, &buff2);
+		printf("pop buffer %d\n", i);
+		for (int j = 0; j < buff2.len; ++j) {
+			printf("%c", buff2.base[j]);
+		}
+		printf("\n");
+		free(buff2.base);
+	}
+
+
+	for (int i = 0; i < number_of_buffs; ++i) {
+		uv_buf_t buff;
+		buff.base = (char*)malloc(sizeof(char) * buff_size);
+		buff.len = buff_size;
+		for (int j = 0; j < buff_size; ++j) {
+			buff.base[j] = 'b';
 		}
 		buff_circular_push(&circular_buff, &buff);
 		free(buff.base);
