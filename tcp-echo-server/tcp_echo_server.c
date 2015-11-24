@@ -9,6 +9,7 @@
  */
 uv_tcp_t server;
 uv_tcp_t *client;
+uv_stream_t *g_stream;
 uv_timer_t gc_req;
 
 /**
@@ -269,7 +270,7 @@ int main() {
 
 	//test_buff_circular();
 	//return 0;
-
+	g_stream = NULL;
 	const int port = 3000;
 	const char *host = "127.0.0.1";
 	printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
@@ -279,9 +280,9 @@ int main() {
 
     loop = uv_default_loop();
 
-	uv_timer_init(loop, &gc_req);
 	buff_circular_init(&buff_circular, 5, 65536);
-
+	uv_timer_init(loop, &gc_req);
+	uv_timer_start(&gc_req, (uv_timer_cb)timer_cb, 0, 2000);
 
     /* convert a humanreadable ip address to a c struct */
     struct sockaddr_in addr = uv_ip4_addr(host, port);
@@ -338,8 +339,6 @@ void connection_cb(uv_stream_t * server, int status) {
  * Callback which is executed on each readable state.
  */
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
-    /* dynamically allocate memory for a new write task */
-    uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
     /* if read bytes counter -1 there is an error or EOF */
     if (nread == -1) {
         if (uv_last_error(loop).code != UV_EOF) {
@@ -362,27 +361,34 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
     printf(" nread=%llu ", (unsigned long long)nread);
     printf(" len=%llu\n", (unsigned long long)buf.len);
 
-	printf("push msg to circular buffer\n");
-	buff_circular_push(&buff_circular, &buf);
-	printf("circular buffer size: %llu\n", (unsigned long long)buff_circular.size);
-    /* write sync the incoming buffer to the socket */
-
     uv_buf_t write_buf = uv_buf_init((char *) malloc(nread), nread);
 	write_buf.len = nread;
+	memset(write_buf.base, 0, write_buf.len);
 	memcpy(write_buf.base, buf.base, nread);
 
-    int r = uv_write(req, stream, &write_buf, 1, NULL);
+	printf("push msg to circular buffer\n");
+	buff_circular_push(&buff_circular, &write_buf);
+	printf("circular buffer size: %llu\n", (unsigned long long)buff_circular.size);
+	g_stream = stream;
 
-    if (r) {
-        fprintf(stderr, "Error on writing client stream: %s.\n", 
-                uv_strerror(uv_last_error(loop)));
-    }
+//	/* write sync the incoming buffer to the socket */
+//    uv_buf_t write_buf = uv_buf_init((char *) malloc(nread), nread);
+//	write_buf.len = nread;
+//	memcpy(write_buf.base, buf.base, nread);
+//    /* dynamically allocate memory for a new write task */
+//    uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
+//    int r = uv_write(req, stream, &write_buf, 1, NULL);
+//
+//    if (r) {
+//        fprintf(stderr, "Error on writing client stream: %s.\n",
+//                uv_strerror(uv_last_error(loop)));
+//    }
 
     /* free the remaining memory */
 	//uv_stop(loop);
     free(buf.base);
-	free(write_buf.base);
-	free(req);
+//	free(write_buf.base);
+//	free(req);
 }
 
 /**
@@ -394,5 +400,27 @@ uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size) {
 
 
 void timer_cb(uv_timer_t* handle) {
+	printf("timer_cb\n");
+	if (g_stream == NULL) {
+		return;
+	}
+	if (buff_circular.size == 0) {
+		return;
+	}
+	/* write sync the incoming buffer to the socket */
+    uv_buf_t write_buf = uv_buf_init((char *) malloc(65536), 65536);
+	write_buf.len = 65536;
+	buff_circular_pop(&buff_circular, &write_buf);
+    /* dynamically allocate memory for a new write task */
+    uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
+    int r = uv_write(req, g_stream, &write_buf, 1, NULL);
 
+    if (r) {
+        fprintf(stderr, "Error on writing client stream: %s.\n",
+                uv_strerror(uv_last_error(loop)));
+    }
+
+    /* free the remaining memory */
+	free(write_buf.base);
+	free(req);
 }
