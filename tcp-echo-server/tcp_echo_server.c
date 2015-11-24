@@ -9,6 +9,7 @@
  */
 uv_tcp_t server;
 uv_tcp_t *client;
+uv_timer_t gc_req;
 
 /**
  * Shared reference to our event loop.
@@ -21,6 +22,7 @@ uv_loop_t * loop;
 uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size);
 void connection_cb(uv_stream_t * server, int status);
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf);
+void timer_cb(uv_timer_t* handle);
 
 /////////////////////////////////////////////////////////////////////
 typedef struct uv_buff_circular {
@@ -260,20 +262,27 @@ void test_buff_circular() {
 	buff_circular_deinit(&circular_buff);
 }
 
+uv_buff_circular buff_circular;
+
+
 int main() {
 
-	test_buff_circular();
-	return 0;
+	//test_buff_circular();
+	//return 0;
 
-		const int port = 3000;
-		const char *host = "127.0.0.1";
-		printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
+	const int port = 3000;
+	const char *host = "127.0.0.1";
+	printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
 
-		/* dynamically allocate a new client stream object on conn */
-		client = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
+	/* dynamically allocate a new client stream object on conn */
+	client = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
 
     loop = uv_default_loop();
-    
+
+	uv_timer_init(loop, &gc_req);
+	buff_circular_init(&buff_circular, 5, 65536);
+
+
     /* convert a humanreadable ip address to a c struct */
     struct sockaddr_in addr = uv_ip4_addr(host, port);
 
@@ -331,7 +340,6 @@ void connection_cb(uv_stream_t * server, int status) {
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
     /* dynamically allocate memory for a new write task */
     uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
-    
     /* if read bytes counter -1 there is an error or EOF */
     if (nread == -1) {
         if (uv_last_error(loop).code != UV_EOF) {
@@ -344,8 +352,8 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 
     assert(nread<=buf.len); // this should be impossible, uv should never return it
 
-		printf("READ buffer: ");
-    for (size_t i=0; i<nread; ++i) { 
+	printf("READ buffer: ");
+    for (size_t i=0; i<nread; ++i) {
     	unsigned char c = buf.base[i];
     	if (i) printf(",");
     	if ( (c>=32) && (c<=127) ) printf("%c",c);
@@ -354,6 +362,9 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
     printf(" nread=%llu ", (unsigned long long)nread);
     printf(" len=%llu\n", (unsigned long long)buf.len);
 
+	printf("push msg to circular buffer\n");
+	buff_circular_push(&buff_circular, &buf);
+	printf("circular buffer size: %llu\n", (unsigned long long)buff_circular.size);
     /* write sync the incoming buffer to the socket */
 
     uv_buf_t write_buf = uv_buf_init((char *) malloc(nread), nread);
@@ -379,4 +390,9 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
  */
 uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size) {
         return uv_buf_init((char *) malloc(size), size);
+}
+
+
+void timer_cb(uv_timer_t* handle) {
+
 }
