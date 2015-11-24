@@ -28,8 +28,37 @@ typedef struct uv_buff_circular {
 	size_t nbuffs; // number of elements in buffs
 	int size; // current size
 	// private
-	uv_buf_t *current_element;
+	uv_buf_t *current_element; // last element
 } uv_buff_circular;
+
+//private functions
+
+/**
+ * Call free for buff
+ */
+static void free_buff(uv_buf_t *buff) {
+	assert(buff != NULL);
+	free(buff->base);
+	buff->base = NULL;
+	buff->len = 0;
+}
+
+/**
+ * Move current_element pointer to next element
+ */
+static void move_internal_pointer(uv_buff_circular * const circular_buff) {
+	assert(circular_buff != NULL);
+	// Move 'current_element' pointer
+	// check if current_element == last element
+	if (circular_buff->current_element == &circular_buff->buffs[circular_buff->nbuffs -1]) {
+		circular_buff->current_element = &circular_buff->buffs[0];
+	}
+	else {
+		circular_buff->current_element++;
+	}
+}
+
+// public functions
 
 /**
  * @param nbufs Number of buffers
@@ -60,22 +89,48 @@ int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const b
 		return 3;
 	}
 
-	// check if current_element == last element
-	if (circular_buff->current_element == &circular_buff->buffs[circular_buff->nbuffs -1]) {
-		circular_buff->current_element = circular_buff->buffs;
+	assert(circular_buff->size <= circular_buff->nbuffs);
+	if (circular_buff->size == circular_buff->nbuffs) { // buffer if full
+		return 4;
 	}
-	else {
-		circular_buff->current_element++;
-	}
-	if (circular_buff->size != 0) {
-		free(circular_buff->current_element->base); // free old elemenrt TODO
-	}
+
+	move_internal_pointer(circular_buff);
+
 	// copy element
 	circular_buff->current_element->len = buff->len;
 	memcpy(circular_buff->current_element->base, buff->base, buff->len);
 	if (circular_buff->size < circular_buff->nbuffs) {
 		circular_buff->size++;
 	}
+	return 0;
+}
+
+/**
+ * @param buff Out pointer. Must be allocated earlier.
+ * @return 0 if success
+ */
+int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
+	if (circular_buff == NULL) {
+		return 1;
+	}
+	if (buff == NULL) {
+		return 2;
+	}
+
+	buff->base = NULL;
+	buff->len = 0;
+	if (circular_buff->size == 0) { // buffer is empty
+		return 3;
+	}
+
+	// move buffer
+	buff->base = circular_buff->current_element->base;
+	buff->len = circular_buff->current_element->len;
+	circular_buff->current_element->base = NULL;
+	circular_buff->current_element->len = 0;
+
+	move_internal_pointer(circular_buff);
+
 	return 0;
 }
 
@@ -107,16 +162,6 @@ int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf
 		}
 	}
 	return 0;
-}
-
-/**
- * Call free for buff
- */
-static void free_buff(uv_buf_t *buff) {
-	assert(buff != NULL);
-	free(buff->base);
-	buff->base = NULL;
-	buff->len = 0;
 }
 
 /**
