@@ -203,12 +203,12 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 void test_buff_circular() {
 	uv_buff_circular circular_buff;
 	const size_t buff_size = 5;
-	const size_t number_of_buffs = 3;
+	const size_t number_of_buffs = 10;
 	buff_circular_init(&circular_buff, number_of_buffs, buff_size);
 
 	for (int i = 0; i < number_of_buffs; ++i) {
 		uv_buf_t buff;
-		buff.base = malloc(sizeof(char) * buff_size);
+		buff.base = (char*)malloc(sizeof(char) * buff_size);
 		buff.len = buff_size;
 		for (int j = 0; j < buff_size; ++j) {
 			buff.base[j] = 'a';
@@ -219,12 +219,12 @@ void test_buff_circular() {
 
 	for (int i = 0; i < circular_buff.nbuffs; ++i) {
 		uv_buf_t buff2;
-		buff2.base = malloc(buff_size);
+		buff2.base = (char*)malloc(sizeof(char) * buff_size);
 		buff2.len = 0;
 		buff_circular_pop(&circular_buff, &buff2);
-		printf("pop buffer\n");
+		printf("pop buffer %d\n", i);
 		for (int j = 0; j < buff2.len; ++j) {
-			printf("%c", buff2.base[i]);
+			//printf("%c", buff2.base[i]);
 		}
 		printf("\n");
 		free(buff2.base);
@@ -243,7 +243,7 @@ int main() {
 		printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
 
 		/* dynamically allocate a new client stream object on conn */
-		client = malloc(sizeof(uv_tcp_t));
+		client = (uv_tcp_t*)malloc(sizeof(uv_tcp_t));
 
     loop = uv_default_loop();
     
