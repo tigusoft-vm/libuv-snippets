@@ -137,10 +137,10 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 	assert(pop_element_index < circular_buff->size);
 
 	// move buffer
-	buff->base = circular_buff->buffs[last_element_index]->base;
-	buff->len = circular_buff->buffs[last_element_index]->len;
-	circular_buff->buffs[last_element_index]->base = NULL;
-	circular_buff->buffs[last_element_index]->len = 0;
+	buff->base = circular_buff->buffs[last_element_index].base;
+	buff->len = circular_buff->buffs[last_element_index].len;
+	circular_buff->buffs[last_element_index].base = NULL;
+	circular_buff->buffs[last_element_index].len = 0;
 	circular_buff->nbuffs--;
 
 	return 0;
@@ -196,6 +196,10 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 /////////////////////////////////////////////////////////////////////
 
 int main() {
+
+
+	return 0;
+
 		const int port = 3000;
 		const char *host = "127.0.0.1";
 		printf("Starting the test echo server. Connect to me, host %s on port %d\n" , host, port);
