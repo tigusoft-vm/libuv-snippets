@@ -65,18 +65,15 @@ static void move_internal_pointer(uv_buff_circular * const circular_buff) {
 // public functions
 
 /**
+ * @param circular_buff Must be allocated in caller.
  * @param nbufs Number of buffers
- * @param buff_size Single buffer size
  */
-void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t buff_size) {
+void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs) {
+	assert(circular_buff != NULL);
 	circular_buff->buffs = (uv_buf_t *)malloc(sizeof(uv_buf_t) * nbufs);
-	/*for (int i = 0; i < nbufs; ++i) {
-		circular_buff->buffs[i] = uv_buf_init((char *) malloc(buff_size), buff_size);
-	}*/
 	circular_buff->nbuffs = nbufs;
 	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
 	circular_buff->size = 0;
-	circular_buff->single_buff_size = buff_size;
 }
 
 /**
@@ -184,7 +181,7 @@ void test_buff_circular() {
 	uv_buff_circular circular_buff;
 	const size_t buff_size = 5;
 	const size_t number_of_buffs = 10;
-	buff_circular_init(&circular_buff, number_of_buffs, buff_size);
+	buff_circular_init(&circular_buff, number_of_buffs);
 
 	for (int i = 0; i < number_of_buffs; ++i) {
 		uv_buf_t buff;
@@ -256,7 +253,7 @@ int main() {
 
     loop = uv_default_loop();
 
-	buff_circular_init(&buff_circular, 5, 65536);
+	buff_circular_init(&buff_circular, 5);
 	uv_timer_init(loop, &gc_req);
 	uv_timer_start(&gc_req, (uv_timer_cb)timer_cb, 0, 2000);
 
