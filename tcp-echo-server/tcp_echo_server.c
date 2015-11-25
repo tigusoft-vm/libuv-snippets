@@ -411,6 +411,7 @@ void timer_cb(uv_timer_t* handle) {
     uv_buf_t write_buf = uv_buf_init((char *) malloc(65536), 65536);
 	write_buf.len = 65536;
 	buff_circular_pop(&buff_circular, &write_buf);
+	printf("write_buf.len: %llu\n", (unsigned long long)write_buf.len);
     /* dynamically allocate memory for a new write task */
     uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
     int r = uv_write(req, g_stream, &write_buf, 1, NULL);
@@ -422,5 +423,5 @@ void timer_cb(uv_timer_t* handle) {
 
     /* free the remaining memory */
 	free(write_buf.base);
-	free(req);
+	//free(req);
 }
