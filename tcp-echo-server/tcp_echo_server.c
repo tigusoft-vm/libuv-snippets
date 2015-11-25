@@ -158,33 +158,6 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 }
 
 /**
- * Call lambda for each element in circular_buff.
- * @return 0 if success
- */
-static int buff_circular_foreach(uv_buff_circular *circular_buff, void(* lambda)(uv_buf_t *)) {
-	if (circular_buff == NULL) {
-		return 1;
-	}
-	if (lambda == NULL) {
-		return 2;
-	}
-
-	uv_buf_t *element = circular_buff->current_element;
-	assert(element != NULL);
-	for (int i = 0; i < circular_buff->nbuffs; ++i) { // for each element
-		assert(element < &circular_buff->buffs[circular_buff->nbuffs]);
-		lambda(element);
-		if (element == &circular_buff->buffs[circular_buff->nbuffs - 1]) { // if element == last element in array
-			element = &circular_buff->buffs[0];
-		}
-		else {
-			element++;
-		}
-	}
-	return 0;
-}
-
-/**
  * Call free() for evry element.
  * Deallocate internal array.
  */
@@ -193,7 +166,6 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 		return;
 	}
 
-	//buff_circular_foreach(circular_buff, free_buff);
 	for (int i = 0; i < circular_buff->nbuffs; ++i) {
 		if (circular_buff->buffs[i].base != NULL)
 			free_buff(&circular_buff->buffs[i]);
@@ -227,7 +199,7 @@ void test_buff_circular() {
 
 	for (int i = 0; i < circular_buff.nbuffs; ++i) {
 		uv_buf_t buff2;
-		buff2.base = (char*)malloc(sizeof(char) * buff_size);
+		buff2.base = NULL;
 		buff2.len = 0;
 		buff_circular_pop(&circular_buff, &buff2);
 		printf("pop buffer %d\n", i);
@@ -252,7 +224,7 @@ void test_buff_circular() {
 
 	for (int i = 0; i < circular_buff.nbuffs; ++i) {
 		uv_buf_t buff2;
-		buff2.base = (char*)malloc(sizeof(char) * buff_size);
+		buff2.base = NULL;
 		buff2.len = 0;
 		buff_circular_pop(&circular_buff, &buff2);
 		printf("pop buffer %d\n", i);
