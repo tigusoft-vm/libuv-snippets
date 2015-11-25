@@ -70,9 +70,9 @@ static void move_internal_pointer(uv_buff_circular * const circular_buff) {
  */
 void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t buff_size) {
 	circular_buff->buffs = (uv_buf_t *)malloc(sizeof(uv_buf_t) * nbufs);
-	for (int i = 0; i < nbufs; ++i) {
+	/*for (int i = 0; i < nbufs; ++i) {
 		circular_buff->buffs[i] = uv_buf_init((char *) malloc(buff_size), buff_size);
-	}
+	}*/
 	circular_buff->nbuffs = nbufs;
 	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
 	circular_buff->size = 0;
@@ -80,30 +80,34 @@ void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs, size_t bu
 }
 
 /**
- * Copy data from buff
+ * Move data from @param buff to @param circular_buff
+ * @param circular_buff Initialized by caller (buff_circular_init).
+ * @param buff Initialized by caller. Clean in this function (.base = NULL, .len=0).
  * @return 0 if success
  */
-int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const buff) {
-	if (buff->len > circular_buff->single_buff_size) {
+int buff_circular_push(uv_buff_circular * const circular_buff, uv_buf_t * const buff) {
+	if (circular_buff == NULL) {
 		return 1;
 	}
-	if (circular_buff == NULL) {
-		return 2;
-	}
 	if (buff == NULL) {
-		return 3;
+		return 2;
 	}
 
 	assert(circular_buff->size <= circular_buff->nbuffs);
 	if (circular_buff->size == circular_buff->nbuffs) { // buffer if full
-		return 4;
+		return 3;
 	}
 
+	// move 'current_element' pointer to next slot
 	move_internal_pointer(circular_buff);
 
-	// copy element
+	// move element
 	circular_buff->current_element->len = buff->len;
-	memcpy(circular_buff->current_element->base, buff->base, buff->len);
+	buff->len = 0;
+	circular_buff->current_element->base = buff->base;
+	buff->base = NULL;
+
+	// increment size
 	if (circular_buff->size < circular_buff->nbuffs) {
 		circular_buff->size++;
 	}
@@ -111,8 +115,9 @@ int buff_circular_push(uv_buff_circular *circular_buff, const uv_buf_t * const b
 }
 
 /**
- * Copy data to buff
- * @param buff Out pointer. Must be allocated earlier.
+ * Move data from @param circular_buff to @param buff
+ * @param circular_buff Initialized by caller (buff_circular_init).
+ * @param buff Out pointer. Must be empty (.base = NULL, .len=0).
  * @return 0 if success
  */
 int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
@@ -123,10 +128,8 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 		return 2;
 	}
 
-	buff->len = 0;
-	if (circular_buff->size == 0) { // buffer is empty
-		return 3;
-	}
+	assert(buff->base == NULL);
+	assert(buff->len == 0);
 
 	size_t pop_element_index = circular_buff->nbuffs;
 	size_t last_element_index = circular_buff->current_element - circular_buff->buffs;
@@ -141,19 +144,14 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
 		}
 	}
 
-/*	if (last_element_index <= circular_buff->size) {
-		pop_element_index = last_element_index - circular_buff->size + 1;
-	}
-	else {
-		pop_element_index = circular_buff->nbuffs - (circular_buff->size - last_element_index - 1);
-	}*/
-
 	assert(pop_element_index <= circular_buff->nbuffs);
 
-	// copy buffer
-	memcpy(buff->base, pop_ptr->base, pop_ptr->len);
+	// move buffer
+	buff->base = pop_ptr->base;
+	pop_ptr->base = NULL;
 	buff->len = pop_ptr->len;
 	pop_ptr->len = 0;
+
 	circular_buff->size--;
 
 	return 0;
@@ -195,7 +193,11 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 		return;
 	}
 
-	buff_circular_foreach(circular_buff, free_buff);
+	//buff_circular_foreach(circular_buff, free_buff);
+	for (int i = 0; i < circular_buff->nbuffs; ++i) {
+		if (circular_buff->buffs[i].base != NULL)
+			free_buff(&circular_buff->buffs[i]);
+	}
 	free(circular_buff->buffs);
 	circular_buff->current_element = NULL;
 	circular_buff->buffs = NULL;
@@ -206,6 +208,7 @@ void buff_circular_deinit(uv_buff_circular *circular_buff) {
 /////////////////////////////////////////////////////////////////////
 
 void test_buff_circular() {
+	printf ("test_buff_circular\n");
 	uv_buff_circular circular_buff;
 	const size_t buff_size = 5;
 	const size_t number_of_buffs = 10;
@@ -261,6 +264,7 @@ void test_buff_circular() {
 	}
 
 	buff_circular_deinit(&circular_buff);
+	printf ("end of test\n");
 }
 
 uv_buff_circular buff_circular;
@@ -268,8 +272,8 @@ uv_buff_circular buff_circular;
 
 int main() {
 
-	//test_buff_circular();
-	//return 0;
+	test_buff_circular();
+	return 0;
 	g_stream = NULL;
 	const int port = 3000;
 	const char *host = "127.0.0.1";
@@ -302,6 +306,7 @@ int main() {
 
     /* execute all tasks in queue */
     uv_run(loop, UV_RUN_DEFAULT);
+	buff_circular_deinit(&buff_circular);
 	if (client != NULL)
 		free(client);
 	return 0;
@@ -350,6 +355,10 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
     }
 
     assert(nread<=buf.len); // this should be impossible, uv should never return it
+
+	if (buf.base[0] == 'z') {
+		uv_stop(loop);
+	}
 
 	printf("READ buffer: ");
     for (size_t i=0; i<nread; ++i) {
