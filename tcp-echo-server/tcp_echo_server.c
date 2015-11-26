@@ -32,7 +32,6 @@ typedef struct uv_buff_circular {
 	int size; // current size
 	// private
 	uv_buf_t *current_element; // last element
-	size_t single_buff_size;
 } uv_buff_circular;
 
 //private functions
@@ -242,8 +241,8 @@ uv_buff_circular buff_circular;
 
 int main() {
 
-	test_buff_circular();
-	return 0;
+	//test_buff_circular();
+	//return 0;
 	g_stream = NULL;
 	const int port = 3000;
 	const char *host = "127.0.0.1";
@@ -326,10 +325,6 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 
     assert(nread<=buf.len); // this should be impossible, uv should never return it
 
-	if (buf.base[0] == 'z') {
-		uv_stop(loop);
-	}
-
 	printf("READ buffer: ");
     for (size_t i=0; i<nread; ++i) {
     	unsigned char c = buf.base[i];
@@ -346,7 +341,12 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 	memcpy(write_buf.base, buf.base, nread);
 
 	printf("push msg to circular buffer\n");
-	buff_circular_push(&buff_circular, &write_buf);
+	int error = buff_circular_push(&buff_circular, &write_buf);
+	if (error) {
+		free(write_buf.base);
+		write_buf.base = NULL;
+		write_buf.len = 0;
+	}
 	printf("circular buffer size: %llu\n", (unsigned long long)buff_circular.size);
 	g_stream = stream;
 
@@ -387,9 +387,16 @@ void timer_cb(uv_timer_t* handle) {
 		return;
 	}
 	/* write sync the incoming buffer to the socket */
-    uv_buf_t write_buf = uv_buf_init((char *) malloc(65536), 65536);
-	write_buf.len = 65536;
+    uv_buf_t write_buf;
+	write_buf.base = NULL;
+	write_buf.len = 0;
 	buff_circular_pop(&buff_circular, &write_buf);
+	if (write_buf.base[0] == 'z' && buff_circular.size == 0) {
+		printf("end loop\n");
+		uv_stop(loop);
+		free(write_buf.base);
+		return;
+	}
 	printf("write_buf.len: %llu\n", (unsigned long long)write_buf.len);
     /* dynamically allocate memory for a new write task */
     uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
