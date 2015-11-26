@@ -343,6 +343,7 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 	printf("push msg to circular buffer\n");
 	int error = buff_circular_push(&buff_circular, &write_buf);
 	if (error) {
+		printf("circular buffer push error\n");
 		free(write_buf.base);
 		write_buf.base = NULL;
 		write_buf.len = 0;
@@ -365,6 +366,7 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 
     /* free the remaining memory */
 	//uv_stop(loop);
+	free(write_buf.base);
     free(buf.base);
 //	free(write_buf.base);
 //	free(req);
@@ -377,6 +379,9 @@ uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size) {
         return uv_buf_init((char *) malloc(size), size);
 }
 
+void write_cb(uv_write_t *req, int status) {
+	free(req);
+}
 
 void timer_cb(uv_timer_t* handle) {
 	printf("timer_cb\n");
@@ -393,14 +398,14 @@ void timer_cb(uv_timer_t* handle) {
 	buff_circular_pop(&buff_circular, &write_buf);
 	if (write_buf.base[0] == 'z' && buff_circular.size == 0) {
 		printf("end loop\n");
-		uv_stop(loop);
 		free(write_buf.base);
+		uv_stop(loop);
 		return;
 	}
 	printf("write_buf.len: %llu\n", (unsigned long long)write_buf.len);
     /* dynamically allocate memory for a new write task */
     uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
-    int r = uv_write(req, g_stream, &write_buf, 1, NULL);
+    int r = uv_write(req, g_stream, &write_buf, 1, write_cb);
 
     if (r) {
         fprintf(stderr, "Error on writing client stream: %s.\n",
