@@ -17,22 +17,11 @@ uv_timer_t gc_req;
  */
 uv_loop_t * loop;
 
-#ifdef UV_VERSION_H
-#if (UV_VERSION_MAJOR == 1)
-
-/**
- * Function declarations.
- */
-uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size);
-void connection_cb(uv_stream_t * server, int status);
-void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf);
-void timer_cb(uv_timer_t* handle);
-
 /////////////////////////////////////////////////////////////////////
 typedef struct uv_buff_circular {
     uv_buf_t *buffs; // array of buffers
     size_t max_size; // number of elements in buffs
-    int size; // current size
+    size_t size; // current size
     // private
     uv_buf_t *current_element; // last element
 } uv_buff_circular;
@@ -134,7 +123,7 @@ int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
     size_t last_element_index = circular_buff->current_element - circular_buff->buffs;
 
     uv_buf_t *pop_ptr = circular_buff->current_element;
-    for (int i = 0; i < circular_buff->size - 1; ++i) {
+    for (size_t i = 0; i < circular_buff->size - 1; ++i) {
         if (pop_ptr == &circular_buff->buffs[0]) {
             pop_ptr += circular_buff->max_size - 1; // last element in array
         }
@@ -166,7 +155,7 @@ void buff_circular_deinit(uv_buff_circular * const circular_buff) {
         return;
     }
 
-    for (int i = 0; i < circular_buff->max_size; ++i) {
+    for (size_t i = 0; i < circular_buff->max_size; ++i) {
         if (circular_buff->buffs[i].base != NULL)
             free_buff(&circular_buff->buffs[i]);
     }
@@ -186,49 +175,48 @@ void test_buff_circular() {
     const size_t number_of_buffs = 10;
     buff_circular_init(&circular_buff, number_of_buffs);
 
-    for (int i = 0; i < number_of_buffs; ++i) {
+    for (size_t i = 0; i < number_of_buffs; ++i) {
         uv_buf_t buff;
         buff.base = (char*)malloc(sizeof(char) * buff_size);
         buff.len = buff_size;
-        for (int j = 0; j < buff_size; ++j) {
+        for (size_t j = 0; j < buff_size; ++j) {
             buff.base[j] = 'a';
         }
         buff_circular_push(&circular_buff, &buff);
         free(buff.base);
     }
 
-    for (int i = 0; i < circular_buff.max_size; ++i) {
+    for (size_t i = 0; i < circular_buff.max_size; ++i) {
         uv_buf_t buff2;
         buff2.base = NULL;
         buff2.len = 0;
         buff_circular_pop(&circular_buff, &buff2);
-        printf("pop buffer %d\n", i);
-        for (int j = 0; j < buff2.len; ++j) {
+        printf("pop buffer %zu\n", i);
+        for (size_t j = 0; j < buff2.len; ++j) {
             printf("%c", buff2.base[j]);
         }
         printf("\n");
         free(buff2.base);
     }
 
-
-    for (int i = 0; i < number_of_buffs; ++i) {
+    for (size_t i = 0; i < number_of_buffs; ++i) {
         uv_buf_t buff;
         buff.base = (char*)malloc(sizeof(char) * buff_size);
         buff.len = buff_size;
-        for (int j = 0; j < buff_size; ++j) {
+        for (size_t j = 0; j < buff_size; ++j) {
             buff.base[j] = 'b';
         }
         buff_circular_push(&circular_buff, &buff);
         free(buff.base);
     }
 
-    for (int i = 0; i < circular_buff.max_size; ++i) {
+    for (size_t i = 0; i < circular_buff.max_size; ++i) {
         uv_buf_t buff2;
         buff2.base = NULL;
         buff2.len = 0;
         buff_circular_pop(&circular_buff, &buff2);
-        printf("pop buffer %d\n", i);
-        for (int j = 0; j < buff2.len; ++j) {
+        printf("pop buffer %zu\n", i);
+        for (size_t j = 0; j < buff2.len; ++j) {
             printf("%c", buff2.base[j]);
         }
         printf("\n");
@@ -240,6 +228,18 @@ void test_buff_circular() {
 }
 
 uv_buff_circular buff_circular;
+
+#ifdef UV_VERSION_H
+#if (UV_VERSION_MAJOR == 1)
+
+/**
+ * Function declarations.
+ */
+void alloc_buffer(uv_handle_t* handle, size_t size, uv_buf_t* buf);
+void connection_cb(uv_stream_t * server, int status);
+void read_cb(uv_stream_t * stream, ssize_t nread, const uv_buf_t* buf);
+void timer_cb(uv_timer_t* handle);
+/////////////////////////////////////////////////////////////////////
 
 
 int main() {
@@ -256,6 +256,7 @@ int main() {
 
     loop = uv_default_loop();
 
+
     buff_circular_init(&buff_circular, 5);
     uv_timer_init(loop, &gc_req);
     uv_timer_start(&gc_req, (uv_timer_cb)timer_cb, 0, 2000);
@@ -266,14 +267,14 @@ int main() {
     /* initialize the server */
     uv_tcp_init(loop, &server);
     /* bind the server to the address above */
-    uv_tcp_bind(&server, addr);
+    uv_tcp_bind(&server, (const struct sockaddr*) &addr, 0);
 
     /* let the server listen on the address for new connections */
     int r = uv_listen((uv_stream_t *) &server, 128, connection_cb);
 
-    if (r) {
+    if (r < 0) {
         return fprintf(stderr, "Error on listening: %s.\n",
-                uv_strerror(uv_last_error(loop)));
+                uv_strerror(r));
     }
 
     /* execute all tasks in queue */
@@ -281,6 +282,7 @@ int main() {
     buff_circular_deinit(&buff_circular);
     if (client != NULL)
         free(client);
+
     return 0;
 }
 
@@ -289,9 +291,9 @@ int main() {
  */
 void connection_cb(uv_stream_t * server, int status) {
     /* if status not zero there was an error */
-    if (status == -1) {
+    if (status < 0) {
         fprintf(stderr, "Error on listening: %s.\n",
-            uv_strerror(uv_last_error(loop)));
+            uv_strerror(status));
     }
 
     /* initialize the new client */
@@ -302,9 +304,9 @@ void connection_cb(uv_stream_t * server, int status) {
         /* start reading from stream */
         int r = uv_read_start((uv_stream_t *) client, alloc_buffer, read_cb);
 
-        if (r) {
+        if (r < 0) {
             fprintf(stderr, "Error on reading client stream: %s.\n",
-                    uv_strerror(uv_last_error(loop)));
+                    uv_strerror(r));
         }
     } else {
         /* close client stream on error */
@@ -315,33 +317,31 @@ void connection_cb(uv_stream_t * server, int status) {
 /**
  * Callback which is executed on each readable state.
  */
-void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
+void read_cb(uv_stream_t * stream, ssize_t nread, const uv_buf_t* buf) {
     /* if read bytes counter -1 there is an error or EOF */
-    if (nread == -1) {
-        if (uv_last_error(loop).code != UV_EOF) {
-            fprintf(stderr, "Error on reading client stream: %s.\n",
-                    uv_strerror(uv_last_error(loop)));
-        }
+    if (nread < 0) {
+        fprintf(stderr, "Error on reading client stream: %s.\n",
+                uv_strerror(nread));
 
         uv_close((uv_handle_t *) stream, NULL);
     }
 
-    assert(nread<=buf.len); // this should be impossible, uv should never return it
+    assert(nread<=(ssize_t)buf->len); // this should be impossible, uv should never return it
 
     printf("READ buffer: ");
-    for (size_t i=0; i<nread; ++i) {
-        unsigned char c = buf.base[i];
+    for (ssize_t i=0; i<nread; ++i) {
+        unsigned char c = buf->base[i];
         if (i) printf(",");
         if ( (c>=32) && (c<=127) ) printf("%c",c);
         else printf("(%u)", (unsigned int)c);
     }
-    printf(" nread=%llu ", (unsigned long long)nread);
-    printf(" len=%llu\n", (unsigned long long)buf.len);
+    printf(" nread=%zu ", nread);
+    printf(" len=%zu\n", buf->len);
 
     uv_buf_t write_buf = uv_buf_init((char *) malloc(nread), nread);
     write_buf.len = nread;
     memset(write_buf.base, 0, write_buf.len);
-    memcpy(write_buf.base, buf.base, nread);
+    memcpy(write_buf.base, buf->base, nread);
 
     printf("push msg to circular buffer\n");
     int error = buff_circular_push(&buff_circular, &write_buf);
@@ -350,7 +350,7 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
         write_buf.base = NULL;
         write_buf.len = 0;
     }
-    printf("circular buffer size: %llu\n", (unsigned long long)buff_circular.size);
+    printf("circular buffer size: %zu\n", buff_circular.size);
     g_stream = stream;
 
 //	/* write sync the incoming buffer to the socket */
@@ -368,18 +368,16 @@ void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf) {
 
     /* free the remaining memory */
     //uv_stop(loop);
-    free(buf.base);
-//	free(write_buf.base);
-//	free(req);
+    free(buf->base);
 }
 
 /**
  * Allocates a buffer which we can use for reading.
  */
-uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size) {
-        return uv_buf_init((char *) malloc(size), size);
+void alloc_buffer(uv_handle_t* handle, size_t size, uv_buf_t* buf) {
+    buf->base = malloc(size);
+    buf->len = size;
 }
-
 
 void timer_cb(uv_timer_t* handle) {
     printf("timer_cb\n");
@@ -400,19 +398,19 @@ void timer_cb(uv_timer_t* handle) {
         free(write_buf.base);
         return;
     }
-    printf("write_buf.len: %llu\n", (unsigned long long)write_buf.len);
+    printf("write_buf.len: %zu\n", write_buf.len);
     /* dynamically allocate memory for a new write task */
     uv_write_t * req = (uv_write_t *) malloc(sizeof(uv_write_t));
     int r = uv_write(req, g_stream, &write_buf, 1, NULL);
 
-    if (r) {
+    if (r < 0) {
         fprintf(stderr, "Error on writing client stream: %s.\n",
-                uv_strerror(uv_last_error(loop)));
+                uv_strerror(r));
     }
 
     /* free the remaining memory */
     free(write_buf.base);
-    //free(req);
+    free(req);
 }
 
 #endif // _(UV_VERSION_MAJOR == 1)
@@ -426,220 +424,6 @@ uv_buf_t alloc_buffer(uv_handle_t * handle, size_t size);
 void connection_cb(uv_stream_t * server, int status);
 void read_cb(uv_stream_t * stream, ssize_t nread, uv_buf_t buf);
 void timer_cb(uv_timer_t* handle);
-
-/////////////////////////////////////////////////////////////////////
-typedef struct uv_buff_circular {
-	uv_buf_t *buffs; // array of buffers
-	size_t max_size; // number of elements in buffs
-	int size; // current size
-	// private
-	uv_buf_t *current_element; // last element
-} uv_buff_circular;
-
-//private functions
-
-/**
- * Call free for single uv_buf_t
- */
-static void free_buff(uv_buf_t *buff) {
-	assert(buff != NULL);
-	free(buff->base);
-	buff->base = NULL;
-	buff->len = 0;
-}
-
-/**
- * Move current_element pointer to next element
- */
-static void move_internal_pointer(uv_buff_circular * const circular_buff) {
-	assert(circular_buff != NULL);
-	// Move 'current_element' pointer
-	// check if current_element == last element
-	if (circular_buff->current_element == &circular_buff->buffs[circular_buff->max_size -1]) {
-		circular_buff->current_element = &circular_buff->buffs[0];
-	}
-	else {
-		circular_buff->current_element++;
-	}
-}
-
-// public functions
-
-/**
- * @param circular_buff Must be allocated in caller.
- * @param nbufs Number of buffers
- */
-void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs) {
-	assert(circular_buff != NULL);
-	circular_buff->buffs = (uv_buf_t *)malloc(sizeof(uv_buf_t) * nbufs);
-	circular_buff->max_size = nbufs;
-	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
-	circular_buff->size = 0;
-}
-
-/**
- * Move data from @param buff to @param circular_buff
- * @param circular_buff Initialized by caller (buff_circular_init).
- * @param buff Initialized by caller. Clean in this function (.base = NULL, .len=0).
- * @return 0 if success
- */
-int buff_circular_push(uv_buff_circular * const circular_buff, uv_buf_t * const buff) {
-	if (circular_buff == NULL) {
-		return 1;
-	}
-	if (buff == NULL) {
-		return 2;
-	}
-
-	assert(circular_buff->size <= circular_buff->max_size);
-	if (circular_buff->size == circular_buff->max_size) { // buffer if full
-		return 3;
-	}
-
-	// move 'current_element' pointer to next slot
-	move_internal_pointer(circular_buff);
-
-	// move element
-	circular_buff->current_element->len = buff->len;
-	buff->len = 0;
-	circular_buff->current_element->base = buff->base;
-	buff->base = NULL;
-
-	// increment size
-	if (circular_buff->size < circular_buff->max_size) {
-		circular_buff->size++;
-	}
-	return 0;
-}
-
-/**
- * Move data from @param circular_buff to @param buff
- * @param circular_buff Initialized by caller (buff_circular_init).
- * @param buff Out pointer. Must be empty (.base = NULL, .len=0).
- * @return 0 if success
- */
-int buff_circular_pop(uv_buff_circular *circular_buff, uv_buf_t * const buff) {
-	if (circular_buff == NULL) {
-		return 1;
-	}
-	if (buff == NULL) {
-		return 2;
-	}
-
-	assert(buff->base == NULL);
-	assert(buff->len == 0);
-
-	size_t pop_element_index = circular_buff->max_size;
-	size_t last_element_index = circular_buff->current_element - circular_buff->buffs;
-
-	uv_buf_t *pop_ptr = circular_buff->current_element;
-	for (int i = 0; i < circular_buff->size - 1; ++i) {
-		if (pop_ptr == &circular_buff->buffs[0]) {
-			pop_ptr += circular_buff->max_size - 1; // last element in array
-		}
-		else {
-			pop_ptr--;
-		}
-	}
-
-	assert(pop_element_index <= circular_buff->max_size);
-
-	// move buffer
-	buff->base = pop_ptr->base;
-	pop_ptr->base = NULL;
-	buff->len = pop_ptr->len;
-	pop_ptr->len = 0;
-
-	circular_buff->size--;
-
-	return 0;
-}
-
-/**
- * Call free() for evry element.
- * Deallocate internal array.
- * Instance of struct 'circular_buff' will be not deallocate.
- */
-void buff_circular_deinit(uv_buff_circular * const circular_buff) {
-	if (circular_buff == NULL) {
-		return;
-	}
-
-	for (int i = 0; i < circular_buff->max_size; ++i) {
-		if (circular_buff->buffs[i].base != NULL)
-			free_buff(&circular_buff->buffs[i]);
-	}
-	free(circular_buff->buffs);
-	circular_buff->current_element = NULL;
-	circular_buff->buffs = NULL;
-	circular_buff->max_size = 0;
-	circular_buff->size = 0;
-}
-
-/////////////////////////////////////////////////////////////////////
-
-void test_buff_circular() {
-	printf ("test_buff_circular\n");
-	uv_buff_circular circular_buff;
-	const size_t buff_size = 5;
-	const size_t number_of_buffs = 10;
-	buff_circular_init(&circular_buff, number_of_buffs);
-
-	for (int i = 0; i < number_of_buffs; ++i) {
-		uv_buf_t buff;
-		buff.base = (char*)malloc(sizeof(char) * buff_size);
-		buff.len = buff_size;
-		for (int j = 0; j < buff_size; ++j) {
-			buff.base[j] = 'a';
-		}
-		buff_circular_push(&circular_buff, &buff);
-		free(buff.base);
-	}
-
-	for (int i = 0; i < circular_buff.max_size; ++i) {
-		uv_buf_t buff2;
-		buff2.base = NULL;
-		buff2.len = 0;
-		buff_circular_pop(&circular_buff, &buff2);
-		printf("pop buffer %d\n", i);
-		for (int j = 0; j < buff2.len; ++j) {
-			printf("%c", buff2.base[j]);
-		}
-		printf("\n");
-		free(buff2.base);
-	}
-
-
-	for (int i = 0; i < number_of_buffs; ++i) {
-		uv_buf_t buff;
-		buff.base = (char*)malloc(sizeof(char) * buff_size);
-		buff.len = buff_size;
-		for (int j = 0; j < buff_size; ++j) {
-			buff.base[j] = 'b';
-		}
-		buff_circular_push(&circular_buff, &buff);
-		free(buff.base);
-	}
-
-	for (int i = 0; i < circular_buff.max_size; ++i) {
-		uv_buf_t buff2;
-		buff2.base = NULL;
-		buff2.len = 0;
-		buff_circular_pop(&circular_buff, &buff2);
-		printf("pop buffer %d\n", i);
-		for (int j = 0; j < buff2.len; ++j) {
-			printf("%c", buff2.base[j]);
-		}
-		printf("\n");
-		free(buff2.base);
-	}
-
-	buff_circular_deinit(&circular_buff);
-	printf ("end of test\n");
-}
-
-uv_buff_circular buff_circular;
-
 
 int main() {
 
