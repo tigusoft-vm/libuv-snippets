@@ -70,6 +70,10 @@ static void move_internal_pointer(uv_buff_circular * const circular_buff) {
 void buff_circular_init(uv_buff_circular *circular_buff, size_t nbufs) {
 	assert(circular_buff != NULL);
 	circular_buff->buffs = (uv_buf_t *)malloc(sizeof(uv_buf_t) * nbufs);
+	for (int i = 0; i < nbufs; ++i) {
+		circular_buff->buffs[i].base = NULL;
+		circular_buff->buffs[i].len = 0;
+	}
 	circular_buff->max_size = nbufs;
 	circular_buff->current_element = &circular_buff->buffs[nbufs -1];
 	circular_buff->size = 0;
